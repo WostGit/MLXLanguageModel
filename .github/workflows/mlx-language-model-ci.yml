@@ -3,12 +3,8 @@ name: MLXLanguageModel CI
 on:
   workflow_dispatch:
     inputs:
-      runner:
-        description: "macOS runner label. Use an Apple Silicon runner for real MLX execution."
-        required: false
-        default: "macos-15-xlarge"
       model_id:
-        description: "Small MLX model to use for smoke tests."
+        description: "Small MLX model used for CI smoke tests."
         required: false
         default: "mlx-community/Qwen3-0.6B-4bit"
   push:
@@ -29,9 +25,9 @@ concurrency:
 
 jobs:
   mlx-language-model-tests:
-    name: MLXLanguageModel smoke tests
-    runs-on: ${{ github.event.inputs.runner || 'macos-15-xlarge' }}
-    timeout-minutes: 60
+    name: MLXLanguageModel smoke tests on macOS 26 arm64
+    runs-on: macos-26
+    timeout-minutes: 75
 
     env:
       MODEL_ID: ${{ github.event.inputs.model_id || 'mlx-community/Qwen3-0.6B-4bit' }}
@@ -46,7 +42,7 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: Show environment
+      - name: Show runner environment
         shell: bash
         run: |
           set -euo pipefail
@@ -65,6 +61,11 @@ jobs:
             echo "- Xcode:"
             xcodebuild -version | sed 's/^/  - /'
           } | tee "$CI_RESULT_DIR/environment.md"
+
+          if [[ "$(uname -m)" != "arm64" ]]; then
+            echo "Expected macos-26 arm64 runner, got $(uname -m)." >&2
+            exit 1
+          fi
 
       - name: Create self-contained Swift package and MLXLanguageModel tests
         shell: bash
@@ -93,16 +94,19 @@ jobs:
                   .package(
                       url: "https://github.com/huggingface/AnyLanguageModel.git",
                       branch: "main",
-                      traits: ["MLX"]
-                  ),
-                  // Work around SwiftPM trait-resolution issues by declaring the MLX dependency directly.
-                  .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "2.25.5")
+                      traits: [
+                          .trait(name: "MLX")
+                      ]
+                  )
               ],
               targets: [
                   .target(
                       name: "MLXLanguageModelSmoke",
                       dependencies: [
                           .product(name: "AnyLanguageModel", package: "AnyLanguageModel")
+                      ],
+                      swiftSettings: [
+                          .define("MLX")
                       ]
                   ),
                   .testTarget(
@@ -110,6 +114,9 @@ jobs:
                       dependencies: [
                           "MLXLanguageModelSmoke",
                           .product(name: "AnyLanguageModel", package: "AnyLanguageModel")
+                      ],
+                      swiftSettings: [
+                          .define("MLX")
                       ]
                   )
               ]
@@ -151,7 +158,7 @@ jobs:
                       #expect(model.isAvailable == true)
                   }
 
-                  @Test func streamingCanBeCancelledThenSessionCanRespondAgain() async throws {
+                  @Test func streamingProducesOutputAndCanBeCancelled() async throws {
                       try requireAppleSilicon()
 
                       let model = MLXLanguageModel(modelId: modelID)
@@ -168,13 +175,7 @@ jobs:
                           break
                       }
 
-                      let response = try await session.respond(
-                          to: "Now say done.",
-                          options: GenerationOptions(maximumResponseTokens: 16)
-                      )
-
                       #expect(sawChunk)
-                      #expect(!response.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                   }
 
                   @Test func sameSessionRejectsConcurrentGeneration() async throws {
@@ -208,6 +209,29 @@ jobs:
                       for try await _ in stream {
                           break
                       }
+                  }
+
+                  @Test func sessionCanRespondAfterStreamingCancellation() async throws {
+                      try requireAppleSilicon()
+
+                      let model = MLXLanguageModel(modelId: modelID)
+                      let session = LanguageModelSession(model: model)
+
+                      let stream = session.streamResponse(
+                          to: "Count from 1 to 100 with one number per line.",
+                          options: GenerationOptions(maximumResponseTokens: 128)
+                      )
+
+                      for try await _ in stream {
+                          break
+                      }
+
+                      let response = try await session.respond(
+                          to: "Now say done.",
+                          options: GenerationOptions(maximumResponseTokens: 16)
+                      )
+
+                      #expect(!response.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                   }
 
                   @Test func differentSessionsCanGenerateIndependently() async throws {
@@ -309,7 +333,7 @@ jobs:
               @Suite("MLXLanguageModel GitHub Actions smoke tests")
               struct MLXLanguageModelSmokeTests {
                   @Test func mlxTraitMustBeEnabled() {
-                      Issue.record("The AnyLanguageModel MLX package trait was not enabled, so MLXLanguageModel is unavailable.")
+                      Issue.record("The MLX compile condition was not enabled, so MLXLanguageModel is unavailable.")
                   }
               }
           #endif
@@ -337,8 +361,8 @@ jobs:
         run: |
           set -o pipefail
 
-          # xcodebuild is used rather than plain swift test because upstream MLX tests
-          # are designed to run under Xcode/xcodebuild for Metal loading behavior.
+          # xcodebuild is used rather than plain swift test because MLX/Metal loading
+          # is more reliable under Xcode on GitHub-hosted macOS runners.
           xcodebuild test \
             -scheme MLXLanguageModelSmoke \
             -destination 'platform=macOS' \
@@ -380,6 +404,7 @@ jobs:
             echo "| Workflow | $GITHUB_WORKFLOW |"
             echo "| Run | [$GITHUB_RUN_ID]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) |"
             echo "| Commit | $GITHUB_SHA |"
+            echo "| Runner label | macos-26 |"
             echo "| Runner name | $RUNNER_NAME |"
             echo "| Runner OS | $RUNNER_OS |"
             echo "| Runner arch | $RUNNER_ARCH |"
@@ -391,8 +416,9 @@ jobs:
             echo "## Tests generated by this workflow"
             echo
             echo "- Basic generation and availability transition"
-            echo "- Streaming early cancellation followed by reuse of the same session"
+            echo "- Streaming produces output and can be cancelled"
             echo "- Same-session concurrent generation rejection"
+            echo "- Session reuse after streaming cancellation"
             echo "- Different-session concurrent generation"
             echo "- Multiple sequential turns and cache clear followed by generation"
             echo "- Invalid model ID failure and failed-cache clearing"
@@ -405,7 +431,7 @@ jobs:
             echo
             echo '```text'
             if [[ -f "$CI_RESULT_DIR/resolve.log" ]]; then
-              tail -n 120 "$CI_RESULT_DIR/resolve.log"
+              tail -n 160 "$CI_RESULT_DIR/resolve.log"
             else
               echo "resolve.log was not created."
             fi
@@ -415,7 +441,7 @@ jobs:
             echo
             echo '```text'
             if [[ -f "$CI_RESULT_DIR/xcodebuild.log" ]]; then
-              tail -n 200 "$CI_RESULT_DIR/xcodebuild.log"
+              tail -n 240 "$CI_RESULT_DIR/xcodebuild.log"
             else
               echo "xcodebuild.log was not created."
             fi
