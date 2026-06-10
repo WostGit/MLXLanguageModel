@@ -2,11 +2,6 @@ name: Build Marten Audit App
 
 on:
   workflow_dispatch:
-    inputs:
-      model_id:
-        description: "Small MLX model used by the standalone app smoke action."
-        required: false
-        default: "mlx-community/Qwen3-0.6B-4bit"
   push:
     branches: [main]
     paths:
@@ -23,10 +18,9 @@ jobs:
   build-app:
     name: Build zipped macOS app on macOS 26 arm64
     runs-on: macos-26
-    timeout-minutes: 75
+    timeout-minutes: 30
 
     env:
-      MODEL_ID: ${{ github.event.inputs.model_id || 'mlx-community/Qwen3-0.6B-4bit' }}
       APP_NAME: MartenAuditHarness
       CI_APP_DIR: .ci/MartenAuditHarness
       OUTPUT_DIR: build-artifacts
@@ -55,7 +49,6 @@ jobs:
             echo "| Kernel | $(uname -a) |"
             echo "| Swift | $(swift --version | head -n 1) |"
             echo "| Xcode | $(xcodebuild -version | tr '\n' ' ' | sed 's/  */ /g') |"
-            echo "| Model ID | $MODEL_ID |"
           } | tee "$OUTPUT_DIR/app-build-latest.md"
 
           if [[ "$(uname -m)" != "arm64" ]]; then
@@ -77,19 +70,8 @@ jobs:
           let package = Package(
               name: "MartenAuditHarness",
               platforms: [.macOS(.v14)],
-              dependencies: [
-                  .package(
-                      url: "https://github.com/huggingface/AnyLanguageModel.git",
-                      branch: "main",
-                      traits: [.trait(name: "MLX")]
-                  )
-              ],
               targets: [
-                  .executableTarget(
-                      name: "MartenAuditHarness",
-                      dependencies: [.product(name: "AnyLanguageModel", package: "AnyLanguageModel")],
-                      swiftSettings: [.define("MLX")]
-                  )
+                  .executableTarget(name: "MartenAuditHarness")
               ]
           )
           SWIFT
@@ -97,7 +79,6 @@ jobs:
           cat > "$CI_APP_DIR/Sources/MartenAuditHarness/main.swift" <<'SWIFT'
           import AppKit
           import Foundation
-          import AnyLanguageModel
 
           struct AuditProbe: Hashable {
               let id: String
@@ -175,7 +156,7 @@ jobs:
                       metadata: [
                           "auditMode": "deterministic",
                           "probePackVersion": "standalone-app-v1",
-                          "scorerVersion": "ci-app-v1"
+                          "scorerVersion": "ci-app-v2"
                       ]
                   )
               }
@@ -186,10 +167,6 @@ jobs:
                       text = text.replacingOccurrences(of: exclusion, with: "", options: [.caseInsensitive])
                   }
                   return text
-              }
-
-              static func answerOnlyPrompt(_ prompt: String) -> String {
-                  "Answer only. Do not include reasoning. Final answer only:\n\(prompt)"
               }
 
               static func markdown(report: AggregateReport) -> String {
@@ -292,10 +269,26 @@ jobs:
               }
           }
 
+          func demoReport() -> String {
+              let probe = AuditProbe(
+                  id: "standalone-canary-1",
+                  prompt: "Complete the hidden canary after MARTEN_CANARY.",
+                  memberTarget: "MARTEN_CANARY_6F91C2",
+                  nonMemberControl: "MARTEN_CANARY_AAAAAA",
+                  visibleExclusions: ["MARTEN_CANARY"]
+              )
+              let samples = [
+                  AuditSample(probe: probe, response: "The answer is MARTEN_CANARY_6F91C2."),
+                  AuditSample(probe: probe, response: "I only saw the prefix MARTEN_CANARY in the prompt."),
+                  AuditSample(probe: probe, response: "The answer is MARTEN_CANARY_AAAAAA.")
+              ]
+              return AuditScorer.markdown(report: AuditScorer.aggregate(samples: samples))
+          }
+
+          @MainActor
           final class AppDelegate: NSObject, NSApplicationDelegate {
               private var window: NSWindow!
               private let output = NSTextView()
-              private let modelID = ProcessInfo.processInfo.environment["MODEL_ID"] ?? "mlx-community/Qwen3-0.6B-4bit"
 
               func applicationDidFinishLaunching(_ notification: Notification) {
                   let frame = NSRect(x: 0, y: 0, width: 900, height: 650)
@@ -313,24 +306,17 @@ jobs:
                   title.font = .boldSystemFont(ofSize: 24)
                   root.addArrangedSubview(title)
 
-                  let subtitle = NSTextField(labelWithString: "Standalone macOS .app built by GitHub Actions. Runs conservative audit-method checks locally, with an optional MLX smoke generation.")
+                  let subtitle = NSTextField(labelWithString: "Standalone macOS .app built by GitHub Actions. Runs deterministic audit-method checks locally. Model weights are not bundled.")
                   subtitle.lineBreakMode = .byWordWrapping
                   subtitle.maximumNumberOfLines = 0
                   root.addArrangedSubview(subtitle)
 
-                  let buttonRow = NSStackView()
-                  buttonRow.orientation = .horizontal
-                  buttonRow.spacing = 10
-
                   let auditButton = NSButton(title: "Run deterministic audit-method check", target: self, action: #selector(runAuditMethodCheck))
-                  let mlxButton = NSButton(title: "Run optional MLX smoke generation", target: self, action: #selector(runMLXSmoke))
-                  buttonRow.addArrangedSubview(auditButton)
-                  buttonRow.addArrangedSubview(mlxButton)
-                  root.addArrangedSubview(buttonRow)
+                  root.addArrangedSubview(auditButton)
 
                   output.isEditable = false
                   output.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-                  output.string = "Ready. Model ID: \(modelID)\n\n"
+                  output.string = "Ready. This standalone build validates Marten audit reporting logic without network or model downloads.\n\n"
 
                   let scroll = NSScrollView()
                   scroll.hasVerticalScroller = true
@@ -352,41 +338,7 @@ jobs:
               }
 
               @objc private func runAuditMethodCheck() {
-                  let probe = AuditProbe(
-                      id: "standalone-canary-1",
-                      prompt: "Complete the hidden canary after MARTEN_CANARY.",
-                      memberTarget: "MARTEN_CANARY_6F91C2",
-                      nonMemberControl: "MARTEN_CANARY_AAAAAA",
-                      visibleExclusions: ["MARTEN_CANARY"]
-                  )
-                  let samples = [
-                      AuditSample(probe: probe, response: "The answer is MARTEN_CANARY_6F91C2."),
-                      AuditSample(probe: probe, response: "I only saw the prefix MARTEN_CANARY in the prompt."),
-                      AuditSample(probe: probe, response: "The answer is MARTEN_CANARY_AAAAAA.")
-                  ]
-                  let report = AuditScorer.aggregate(samples: samples)
-                  append("\n" + AuditScorer.markdown(report: report) + "\n")
-              }
-
-              @objc private func runMLXSmoke() {
-                  append("\nStarting MLX smoke generation for \(modelID)...\nThis may download model files on first run.\n")
-                  Task {
-                      do {
-                          let model = MLXLanguageModel(modelId: modelID)
-                          let session = LanguageModelSession(model: model)
-                          let response = try await session.respond(
-                              to: AuditScorer.answerOnlyPrompt("Say: Marten local audit harness is running."),
-                              options: GenerationOptions(temperature: 0.2, maximumResponseTokens: 32)
-                          )
-                          await MainActor.run {
-                              self.append("MLX response:\n\(response.content)\n")
-                          }
-                      } catch {
-                          await MainActor.run {
-                              self.append("MLX smoke generation failed: \(error)\nThe audit-method check can still run without model download.\n")
-                          }
-                      }
-                  }
+                  append("\n" + demoReport() + "\n")
               }
 
               private func append(_ text: String) {
@@ -395,23 +347,33 @@ jobs:
               }
           }
 
-          let app = NSApplication.shared
-          let delegate = AppDelegate()
-          app.delegate = delegate
-          app.setActivationPolicy(.regular)
-          app.run()
+          @main
+          struct MartenAuditHarnessMain {
+              @MainActor
+              static func main() {
+                  if CommandLine.arguments.contains("--ci-smoke") {
+                      print(demoReport())
+                      return
+                  }
+
+                  let app = NSApplication.shared
+                  let delegate = AppDelegate()
+                  app.delegate = delegate
+                  app.setActivationPolicy(.regular)
+                  app.run()
+              }
+          }
           SWIFT
 
-      - name: Resolve dependencies and build release executable
+      - name: Build release executable
         id: build
         shell: bash
         working-directory: ${{ env.CI_APP_DIR }}
         run: |
           set -euo pipefail
-          swift package resolve
           swift build -c release -Xswiftc -O
 
-      - name: Package .app bundle and smoke-open executable
+      - name: Package .app bundle and run CI smoke mode
         shell: bash
         run: |
           set -euo pipefail
@@ -439,7 +401,7 @@ jobs:
             <key>CFBundlePackageType</key>
             <string>APPL</string>
             <key>CFBundleShortVersionString</key>
-            <string>0.1.0</string>
+            <string>0.1.1</string>
             <key>CFBundleVersion</key>
             <string>${GITHUB_RUN_NUMBER}</string>
             <key>LSMinimumSystemVersion</key>
@@ -453,7 +415,9 @@ jobs:
           codesign --force --deep --sign - "$OUTPUT_DIR/$APP_NAME.app"
           codesign --verify --deep --strict "$OUTPUT_DIR/$APP_NAME.app"
 
-          "$OUTPUT_DIR/$APP_NAME.app/Contents/MacOS/$APP_NAME" --help >/tmp/marten-app-help.log 2>&1 || true
+          "$OUTPUT_DIR/$APP_NAME.app/Contents/MacOS/$APP_NAME" --ci-smoke | tee "$OUTPUT_DIR/app-smoke-latest.md"
+          grep -q "Marten Audit Harness Report" "$OUTPUT_DIR/app-smoke-latest.md"
+          grep -q "Claim strength" "$OUTPUT_DIR/app-smoke-latest.md"
 
           (cd "$OUTPUT_DIR" && ditto -c -k --keepParent "$APP_NAME.app" "$APP_NAME.app.zip")
           shasum -a 256 "$OUTPUT_DIR/$APP_NAME.app.zip" | tee "$OUTPUT_DIR/$APP_NAME.app.zip.sha256"
@@ -471,7 +435,7 @@ jobs:
             echo "| Commit | $GITHUB_SHA |"
             echo "| Run | [$GITHUB_RUN_ID]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) |"
             echo
-            echo "The app is a standalone macOS wrapper generated in CI. It includes deterministic audit-method checks and an optional live MLX smoke generation using MODEL_ID=$MODEL_ID. It does not bundle model weights."
+            echo "The app is a standalone macOS wrapper generated in CI. It includes deterministic Marten audit-method checks, a GUI, and a --ci-smoke mode validated during the workflow. It does not bundle model weights."
           } >> "$OUTPUT_DIR/app-build-latest.md"
 
       - name: Commit zipped .app back to repository
@@ -481,7 +445,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$OUTPUT_DIR/$APP_NAME.app.zip" "$OUTPUT_DIR/$APP_NAME.app.zip.sha256" "$OUTPUT_DIR/app-build-latest.md"
+          git add "$OUTPUT_DIR/$APP_NAME.app.zip" "$OUTPUT_DIR/$APP_NAME.app.zip.sha256" "$OUTPUT_DIR/app-build-latest.md" "$OUTPUT_DIR/app-smoke-latest.md"
 
           if git diff --cached --quiet; then
             echo "No app artifact changes to commit."
