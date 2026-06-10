@@ -81,33 +81,22 @@ jobs:
 
           let package = Package(
               name: "MLXLanguageModelSmoke",
-              platforms: [
-                  .macOS(.v14)
-              ],
+              platforms: [.macOS(.v14)],
               products: [
-                  .library(
-                      name: "MLXLanguageModelSmoke",
-                      targets: ["MLXLanguageModelSmoke"]
-                  )
+                  .library(name: "MLXLanguageModelSmoke", targets: ["MLXLanguageModelSmoke"])
               ],
               dependencies: [
                   .package(
                       url: "https://github.com/huggingface/AnyLanguageModel.git",
                       branch: "main",
-                      traits: [
-                          .trait(name: "MLX")
-                      ]
+                      traits: [.trait(name: "MLX")]
                   )
               ],
               targets: [
                   .target(
                       name: "MLXLanguageModelSmoke",
-                      dependencies: [
-                          .product(name: "AnyLanguageModel", package: "AnyLanguageModel")
-                      ],
-                      swiftSettings: [
-                          .define("MLX")
-                      ]
+                      dependencies: [.product(name: "AnyLanguageModel", package: "AnyLanguageModel")],
+                      swiftSettings: [.define("MLX")]
                   ),
                   .testTarget(
                       name: "MLXLanguageModelSmokeTests",
@@ -115,9 +104,7 @@ jobs:
                           "MLXLanguageModelSmoke",
                           .product(name: "AnyLanguageModel", package: "AnyLanguageModel")
                       ],
-                      swiftSettings: [
-                          .define("MLX")
-                      ]
+                      swiftSettings: [.define("MLX")]
                   )
               ]
           )
@@ -133,209 +120,197 @@ jobs:
           import AnyLanguageModel
 
           #if MLX
-              @Suite("MLXLanguageModel GitHub Actions smoke tests", .serialized)
-              struct MLXLanguageModelSmokeTests {
-                  private let modelID = ProcessInfo.processInfo.environment["MODEL_ID"] ?? "mlx-community/Qwen3-0.6B-4bit"
-                  private let invalidModelID = "mlx-community/this-model-should-not-exist-mlx-language-model-ci"
+          @Suite("MLXLanguageModel GitHub Actions smoke tests", .serialized)
+          struct MLXLanguageModelSmokeTests {
+              private let modelID = ProcessInfo.processInfo.environment["MODEL_ID"] ?? "mlx-community/Qwen3-0.6B-4bit"
+              private let invalidModelID = "mlx-community/this-model-should-not-exist-mlx-language-model-ci"
 
-                  @Test func basicGenerationAndAvailability() async throws {
-                      try requireAppleSilicon()
+              @Test func basicGenerationAndAvailability() async throws {
+                  try requireAppleSilicon()
+                  let model = MLXLanguageModel(modelId: modelID)
+                  await model.removeFromCache()
+                  #expect(model.availability == .unavailable(.notLoaded))
+                  #expect(model.isAvailable == false)
 
-                      let model = MLXLanguageModel(modelId: modelID)
-                      await model.removeFromCache()
+                  let session = LanguageModelSession(model: model)
+                  let response = try await session.respond(
+                      to: "Reply with exactly one short friendly sentence.",
+                      options: GenerationOptions(temperature: 0.2, maximumResponseTokens: 32)
+                  )
 
-                      #expect(model.availability == .unavailable(.notLoaded))
-                      #expect(model.isAvailable == false)
+                  #expect(!response.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                  #expect(model.availability == .available)
+                  #expect(model.isAvailable == true)
+              }
 
-                      let session = LanguageModelSession(model: model)
-                      let response = try await session.respond(
-                          to: "Reply with exactly one short friendly sentence.",
-                          options: GenerationOptions(temperature: 0.2, maximumResponseTokens: 32)
-                      )
+              @Test func streamingProducesOutputAndCanBeCancelled() async throws {
+                  try requireAppleSilicon()
+                  let model = MLXLanguageModel(modelId: modelID)
+                  let session = LanguageModelSession(model: model)
+                  let stream = session.streamResponse(
+                      to: "Count from 1 to 100 with one number per line.",
+                      options: GenerationOptions(maximumResponseTokens: 128)
+                  )
 
-                      #expect(!response.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                      #expect(model.availability == .available)
-                      #expect(model.isAvailable == true)
+                  var sawChunk = false
+                  for try await partial in stream {
+                      sawChunk = sawChunk || !partial.content.isEmpty
+                      break
                   }
 
-                  @Test func streamingProducesOutputAndCanBeCancelled() async throws {
-                      try requireAppleSilicon()
+                  #expect(sawChunk)
+              }
 
-                      let model = MLXLanguageModel(modelId: modelID)
-                      let session = LanguageModelSession(model: model)
+              @Test func sameSessionRejectsConcurrentGeneration() async throws {
+                  try requireAppleSilicon()
+                  let model = MLXLanguageModel(modelId: modelID)
+                  let session = LanguageModelSession(model: model)
+                  let stream = session.streamResponse(
+                      to: "Count from 1 to 400 with one number per line.",
+                      options: GenerationOptions(maximumResponseTokens: 256)
+                  )
 
-                      let stream = session.streamResponse(
-                          to: "Count from 1 to 100 with one number per line.",
-                          options: GenerationOptions(maximumResponseTokens: 128)
-                      )
-
-                      var sawChunk = false
-                      for try await partial in stream {
-                          sawChunk = sawChunk || !partial.content.isEmpty
-                          break
-                      }
-
-                      #expect(sawChunk)
-                  }
-
-                  @Test func sameSessionRejectsConcurrentGeneration() async throws {
-                      try requireAppleSilicon()
-
-                      let model = MLXLanguageModel(modelId: modelID)
-                      let session = LanguageModelSession(model: model)
-
-                      let stream = session.streamResponse(
-                          to: "Count from 1 to 400 with one number per line.",
-                          options: GenerationOptions(maximumResponseTokens: 256)
-                      )
-
-                      do {
-                          _ = try await session.respond(
-                              to: "This second request should be rejected while streaming is active.",
-                              options: GenerationOptions(maximumResponseTokens: 16)
-                          )
-                          Issue.record("Expected same-session concurrent generation to throw.")
-                      } catch let error as LanguageModelSession.GenerationError {
-                          switch error {
-                          case .concurrentRequests:
-                              break
-                          default:
-                              Issue.record("Expected .concurrentRequests, got \(error)")
-                          }
-                      } catch {
-                          Issue.record("Expected LanguageModelSession.GenerationError.concurrentRequests, got \(error)")
-                      }
-
-                      for try await _ in stream {
-                          break
-                      }
-                  }
-
-                  @Test func sessionCanRespondAfterStreamingCancellation() async throws {
-                      try requireAppleSilicon()
-
-                      let model = MLXLanguageModel(modelId: modelID)
-                      let session = LanguageModelSession(model: model)
-
-                      let stream = session.streamResponse(
-                          to: "Count from 1 to 100 with one number per line.",
-                          options: GenerationOptions(maximumResponseTokens: 128)
-                      )
-
-                      for try await _ in stream {
-                          break
-                      }
-
-                      let response = try await session.respond(
-                          to: "Now say done.",
+                  do {
+                      _ = try await session.respond(
+                          to: "This second request should be rejected while streaming is active.",
                           options: GenerationOptions(maximumResponseTokens: 16)
                       )
-
-                      #expect(!response.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                  }
-
-                  @Test func differentSessionsCanGenerateIndependently() async throws {
-                      try requireAppleSilicon()
-
-                      let model = MLXLanguageModel(modelId: modelID)
-                      let sessionA = LanguageModelSession(model: model)
-                      let sessionB = LanguageModelSession(model: model)
-
-                      async let first = sessionA.respond(
-                          to: "Say hello in one short sentence.",
-                          options: GenerationOptions(maximumResponseTokens: 24)
-                      )
-                      async let second = sessionB.respond(
-                          to: "Say goodbye in one short sentence.",
-                          options: GenerationOptions(maximumResponseTokens: 24)
-                      )
-
-                      let outputs = try await [first.content, second.content]
-                      #expect(outputs.count == 2)
-                      #expect(outputs.allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
-                  }
-
-                  @Test func multipleSequentialTurnsAndCacheClearStillWork() async throws {
-                      try requireAppleSilicon()
-
-                      let model = MLXLanguageModel(modelId: modelID)
-                      let session = LanguageModelSession(model: model)
-
-                      let first = try await session.respond(
-                          to: "Remember this word: kiwi.",
-                          options: GenerationOptions(maximumResponseTokens: 32)
-                      )
-                      let second = try await session.respond(
-                          to: "What fruit word did I ask you to remember? Answer briefly.",
-                          options: GenerationOptions(maximumResponseTokens: 32)
-                      )
-
-                      #expect(!first.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                      #expect(!second.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                      await model.removeFromCache()
-
-                      let freshSession = LanguageModelSession(model: model)
-                      let afterClear = try await freshSession.respond(
-                          to: "Say cache cleared.",
-                          options: GenerationOptions(maximumResponseTokens: 16)
-                      )
-
-                      #expect(!afterClear.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                  }
-
-                  @Test func invalidModelIDFailsCleanlyAndCacheCanBeCleared() async throws {
-                      try requireAppleSilicon()
-
-                      let model = MLXLanguageModel(modelId: invalidModelID)
-                      await model.removeFromCache()
-
-                      #expect(model.availability == .unavailable(.notLoaded))
-                      #expect(model.isAvailable == false)
-
-                      let session = LanguageModelSession(model: model)
-                      await #expect(throws: Error.self) {
-                          _ = try await session.respond(
-                              to: "Hello",
-                              options: GenerationOptions(maximumResponseTokens: 8)
-                          )
-                      }
-
-                      switch model.availability {
-                      case .unavailable(.failedToLoad(let description)):
-                          #expect(!description.isEmpty)
+                      Issue.record("Expected same-session concurrent generation to throw.")
+                  } catch let error as LanguageModelSession.GenerationError {
+                      switch error {
+                      case .concurrentRequests:
+                          break
                       default:
-                          Issue.record("Expected failedToLoad availability after invalid model request.")
+                          Issue.record("Expected .concurrentRequests, got \(error)")
                       }
+                  } catch {
+                      Issue.record("Expected LanguageModelSession.GenerationError.concurrentRequests, got \(error)")
+                  }
 
-                      await model.removeFromCache()
-                      #expect(model.availability == .unavailable(.notLoaded))
-                      #expect(model.isAvailable == false)
+                  for try await _ in stream {
+                      break
                   }
               }
 
-              private func requireAppleSilicon() throws {
-                  let machine = machineHardwareName()
-                  try #require(machine.contains("arm64") || machine.contains("aarch64"), "MLX tests require Apple Silicon. Current machine: \(machine)")
+              @Test func sessionCanRespondAfterStreamingCancellation() async throws {
+                  try requireAppleSilicon()
+                  let model = MLXLanguageModel(modelId: modelID)
+                  let session = LanguageModelSession(model: model)
+                  let stream = session.streamResponse(
+                      to: "Count from 1 to 100 with one number per line.",
+                      options: GenerationOptions(maximumResponseTokens: 128)
+                  )
+
+                  for try await _ in stream {
+                      break
+                  }
+
+                  let response = try await session.respond(
+                      to: "Now say done.",
+                      options: GenerationOptions(maximumResponseTokens: 16)
+                  )
+
+                  #expect(!response.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
               }
 
-              private func machineHardwareName() -> String {
-                  var systemInfo = utsname()
-                  uname(&systemInfo)
+              @Test func differentSessionsCanGenerateIndependently() async throws {
+                  try requireAppleSilicon()
+                  let model = MLXLanguageModel(modelId: modelID)
+                  let sessionA = LanguageModelSession(model: model)
+                  let sessionB = LanguageModelSession(model: model)
 
-                  return withUnsafePointer(to: &systemInfo.machine) { pointer in
-                      pointer.withMemoryRebound(to: CChar.self, capacity: 1) { machine in
-                          String(cString: machine)
-                      }
+                  async let first = sessionA.respond(
+                      to: "Say hello in one short sentence.",
+                      options: GenerationOptions(maximumResponseTokens: 24)
+                  )
+                  async let second = sessionB.respond(
+                      to: "Say goodbye in one short sentence.",
+                      options: GenerationOptions(maximumResponseTokens: 24)
+                  )
+
+                  let outputs = try await [first.content, second.content]
+                  #expect(outputs.count == 2)
+                  #expect(outputs.allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+              }
+
+              @Test func multipleSequentialTurnsAndCacheClearStillWork() async throws {
+                  try requireAppleSilicon()
+                  let model = MLXLanguageModel(modelId: modelID)
+                  let session = LanguageModelSession(model: model)
+
+                  let first = try await session.respond(
+                      to: "Remember this word: kiwi.",
+                      options: GenerationOptions(maximumResponseTokens: 32)
+                  )
+                  let second = try await session.respond(
+                      to: "What fruit word did I ask you to remember? Answer briefly.",
+                      options: GenerationOptions(maximumResponseTokens: 32)
+                  )
+
+                  #expect(!first.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                  #expect(!second.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                  await model.removeFromCache()
+
+                  let freshSession = LanguageModelSession(model: model)
+                  let afterClear = try await freshSession.respond(
+                      to: "Say cache cleared.",
+                      options: GenerationOptions(maximumResponseTokens: 16)
+                  )
+
+                  #expect(!afterClear.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+              }
+
+              @Test func invalidModelIDFailsCleanlyAndCacheCanBeCleared() async throws {
+                  try requireAppleSilicon()
+                  let model = MLXLanguageModel(modelId: invalidModelID)
+                  await model.removeFromCache()
+
+                  #expect(model.availability == .unavailable(.notLoaded))
+                  #expect(model.isAvailable == false)
+
+                  let session = LanguageModelSession(model: model)
+                  await #expect(throws: Error.self) {
+                      _ = try await session.respond(
+                          to: "Hello",
+                          options: GenerationOptions(maximumResponseTokens: 8)
+                      )
+                  }
+
+                  switch model.availability {
+                  case .unavailable(.failedToLoad(let description)):
+                      #expect(!description.isEmpty)
+                  default:
+                      Issue.record("Expected failedToLoad availability after invalid model request.")
+                  }
+
+                  await model.removeFromCache()
+                  #expect(model.availability == .unavailable(.notLoaded))
+                  #expect(model.isAvailable == false)
+              }
+          }
+
+          private func requireAppleSilicon() throws {
+              let machine = machineHardwareName()
+              try #require(machine.contains("arm64") || machine.contains("aarch64"), "MLX tests require Apple Silicon. Current machine: \(machine)")
+          }
+
+          private func machineHardwareName() -> String {
+              var systemInfo = utsname()
+              uname(&systemInfo)
+              return withUnsafePointer(to: &systemInfo.machine) { pointer in
+                  pointer.withMemoryRebound(to: CChar.self, capacity: 1) { machine in
+                      String(cString: machine)
                   }
               }
+          }
           #else
-              @Suite("MLXLanguageModel GitHub Actions smoke tests")
-              struct MLXLanguageModelSmokeTests {
-                  @Test func mlxTraitMustBeEnabled() {
-                      Issue.record("The MLX compile condition was not enabled, so MLXLanguageModel is unavailable.")
-                  }
+          @Suite("MLXLanguageModel GitHub Actions smoke tests")
+          struct MLXLanguageModelSmokeTests {
+              @Test func mlxTraitMustBeEnabled() {
+                  Issue.record("The MLX compile condition was not enabled, so MLXLanguageModel is unavailable.")
               }
+          }
           #endif
           SWIFT
 
@@ -360,12 +335,11 @@ jobs:
           MODEL_ID: ${{ env.MODEL_ID }}
         run: |
           set -o pipefail
-
-          # xcodebuild is used rather than plain swift test because MLX/Metal loading
-          # is more reliable under Xcode on GitHub-hosted macOS runners.
           xcodebuild test \
             -scheme MLXLanguageModelSmoke \
             -destination 'platform=macOS' \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
             2>&1 | tee ../../test-results/xcodebuild.log
 
           status=${PIPESTATUS[0]}
@@ -460,7 +434,6 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           git add "$CI_RESULT_DIR/latest.md" "$CI_RESULT_DIR/history" "$CI_RESULT_DIR/environment.md" || true
 
           if git diff --cached --quiet; then
