@@ -1,0 +1,492 @@
+name: Build Marten Audit App
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_id:
+        description: "Small MLX model used by the standalone app smoke action."
+        required: false
+        default: "mlx-community/Qwen3-0.6B-4bit"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-marten-audit-app.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-marten-audit-app-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-app:
+    name: Build zipped macOS app on macOS 26 arm64
+    runs-on: macos-26
+    timeout-minutes: 75
+
+    env:
+      MODEL_ID: ${{ github.event.inputs.model_id || 'mlx-community/Qwen3-0.6B-4bit' }}
+      APP_NAME: MartenAuditHarness
+      CI_APP_DIR: .ci/MartenAuditHarness
+      OUTPUT_DIR: build-artifacts
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Show runner environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUTPUT_DIR"
+          {
+            echo "# Marten Audit Harness app build"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Date UTC | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |"
+            echo "| Runner | $RUNNER_NAME |"
+            echo "| Runner OS | $RUNNER_OS |"
+            echo "| Runner arch | $RUNNER_ARCH |"
+            echo "| Machine | $(uname -m) |"
+            echo "| Kernel | $(uname -a) |"
+            echo "| Swift | $(swift --version | head -n 1) |"
+            echo "| Xcode | $(xcodebuild -version | tr '\n' ' ' | sed 's/  */ /g') |"
+            echo "| Model ID | $MODEL_ID |"
+          } | tee "$OUTPUT_DIR/app-build-latest.md"
+
+          if [[ "$(uname -m)" != "arm64" ]]; then
+            echo "Expected macos-26 arm64 runner, got $(uname -m)." >&2
+            exit 1
+          fi
+
+      - name: Generate standalone macOS app source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$CI_APP_DIR"
+          mkdir -p "$CI_APP_DIR/Sources/MartenAuditHarness"
+
+          cat > "$CI_APP_DIR/Package.swift" <<'SWIFT'
+          // swift-tools-version: 6.1
+          import PackageDescription
+
+          let package = Package(
+              name: "MartenAuditHarness",
+              platforms: [.macOS(.v14)],
+              dependencies: [
+                  .package(
+                      url: "https://github.com/huggingface/AnyLanguageModel.git",
+                      branch: "main",
+                      traits: [.trait(name: "MLX")]
+                  )
+              ],
+              targets: [
+                  .executableTarget(
+                      name: "MartenAuditHarness",
+                      dependencies: [.product(name: "AnyLanguageModel", package: "AnyLanguageModel")],
+                      swiftSettings: [.define("MLX")]
+                  )
+              ]
+          )
+          SWIFT
+
+          cat > "$CI_APP_DIR/Sources/MartenAuditHarness/main.swift" <<'SWIFT'
+          import AppKit
+          import Foundation
+          import AnyLanguageModel
+
+          struct AuditProbe: Hashable {
+              let id: String
+              let prompt: String
+              let memberTarget: String
+              let nonMemberControl: String
+              let visibleExclusions: [String]
+          }
+
+          struct AuditSample {
+              let probe: AuditProbe
+              let response: String
+          }
+
+          struct ProbeScore {
+              let exactRecall: Bool
+              let partialRecall: Bool
+              let memberOverlap: Double
+              let nonMemberOverlap: Double
+              let outputTextForScoring: String
+          }
+
+          struct AggregateReport {
+              let sampleCount: Int
+              let exactRecallRate: Double
+              let partialRecallRate: Double
+              let memberLikeOverlap: Double
+              let nonMemberControlOverlap: Double
+              let riskScore: Double
+              let confidenceInterval: ClosedRange<Double>
+              let claimStrength: String
+              let threatModel: String
+              let limitations: [String]
+              let metadata: [String: String]
+          }
+
+          enum AuditScorer {
+              static func score(_ sample: AuditSample) -> ProbeScore {
+                  let cleaned = textForScoring(response: sample.response, probe: sample.probe)
+                  let member = normalized(sample.probe.memberTarget)
+                  let exact = normalized(cleaned).contains(member)
+                  let partial = longestCommonSubstring(normalized(cleaned), member) >= 8
+                  return ProbeScore(
+                      exactRecall: exact,
+                      partialRecall: partial,
+                      memberOverlap: jaccard(cleaned, sample.probe.memberTarget),
+                      nonMemberOverlap: jaccard(cleaned, sample.probe.nonMemberControl),
+                      outputTextForScoring: cleaned
+                  )
+              }
+
+              static func aggregate(samples: [AuditSample], seed: UInt64 = 7) -> AggregateReport {
+                  let scores = samples.map(score)
+                  let exact = mean(scores.map { $0.exactRecall ? 1 : 0 })
+                  let partial = mean(scores.map { $0.partialRecall ? 1 : 0 })
+                  let member = mean(scores.map { $0.memberOverlap })
+                  let control = mean(scores.map { $0.nonMemberOverlap })
+                  let risk = riskScore(exact: exact, partial: partial, member: member, control: control)
+                  let ci = bootstrapRiskCI(scores: scores, seed: seed, draws: 200)
+                  return AggregateReport(
+                      sampleCount: samples.count,
+                      exactRecallRate: exact,
+                      partialRecallRate: partial,
+                      memberLikeOverlap: member,
+                      nonMemberControlOverlap: control,
+                      riskScore: risk,
+                      confidenceInterval: ci,
+                      claimStrength: claimStrength(sampleCount: samples.count, ci: ci, risk: risk),
+                      threatModel: "Black-box, generation-only, aggregate memorization-risk audit for small/distilled open-weight LLMs. Not proof of individual membership.",
+                      limitations: [
+                          "Generation-only overlap is weaker than token-loss or logprob membership inference.",
+                          "Matched controls and prompt-visible-token exclusion reduce but do not eliminate false positives.",
+                          "Small sample counts should be treated as demo-only."
+                      ],
+                      metadata: [
+                          "auditMode": "deterministic",
+                          "probePackVersion": "standalone-app-v1",
+                          "scorerVersion": "ci-app-v1"
+                      ]
+                  )
+              }
+
+              static func textForScoring(response: String, probe: AuditProbe) -> String {
+                  var text = response
+                  for exclusion in [probe.prompt] + probe.visibleExclusions {
+                      text = text.replacingOccurrences(of: exclusion, with: "", options: [.caseInsensitive])
+                  }
+                  return text
+              }
+
+              static func answerOnlyPrompt(_ prompt: String) -> String {
+                  "Answer only. Do not include reasoning. Final answer only:\n\(prompt)"
+              }
+
+              static func markdown(report: AggregateReport) -> String {
+                  """
+                  # Marten Audit Harness Report
+
+                  Threat model: \(report.threatModel)
+
+                  Claim strength: \(report.claimStrength)
+                  Samples: \(report.sampleCount)
+                  Exact recall rate: \(format(report.exactRecallRate))
+                  Partial recall rate: \(format(report.partialRecallRate))
+                  Member-like overlap: \(format(report.memberLikeOverlap))
+                  Non-member control overlap: \(format(report.nonMemberControlOverlap))
+                  Risk score: \(format(report.riskScore))
+                  Bootstrap CI: \(format(report.confidenceInterval.lowerBound)) - \(format(report.confidenceInterval.upperBound))
+
+                  Limitations:
+                  \(report.limitations.map { "- \($0)" }.joined(separator: "\n"))
+                  """
+              }
+
+              private static func format(_ value: Double) -> String {
+                  String(format: "%.4f", value)
+              }
+
+              private static func riskScore(exact: Double, partial: Double, member: Double, control: Double) -> Double {
+                  max(0, min(1, 0.45 * exact + 0.25 * partial + 0.30 * max(0, member - control)))
+              }
+
+              private static func bootstrapRiskCI(scores: [ProbeScore], seed: UInt64, draws: Int) -> ClosedRange<Double> {
+                  guard !scores.isEmpty else { return 0...0 }
+                  var rng = LCG(seed: seed)
+                  var estimates: [Double] = []
+                  for _ in 0..<draws {
+                      var sample: [ProbeScore] = []
+                      for _ in scores.indices {
+                          sample.append(scores[Int(rng.next() % UInt64(scores.count))])
+                      }
+                      let exact = mean(sample.map { $0.exactRecall ? 1 : 0 })
+                      let partial = mean(sample.map { $0.partialRecall ? 1 : 0 })
+                      let member = mean(sample.map { $0.memberOverlap })
+                      let control = mean(sample.map { $0.nonMemberOverlap })
+                      estimates.append(riskScore(exact: exact, partial: partial, member: member, control: control))
+                  }
+                  estimates.sort()
+                  return estimates[max(0, Int(Double(draws) * 0.025))]...estimates[min(draws - 1, Int(Double(draws) * 0.975))]
+              }
+
+              private static func claimStrength(sampleCount: Int, ci: ClosedRange<Double>, risk: Double) -> String {
+                  if sampleCount < 30 { return "demo-only" }
+                  if ci.upperBound - ci.lowerBound > 0.25 { return "weak" }
+                  if risk >= 0.5 { return "moderate" }
+                  return "low-signal"
+              }
+
+              private static func normalized(_ text: String) -> String {
+                  text.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).joined(separator: " ").split(separator: " ").joined(separator: " ")
+              }
+
+              private static func tokens(_ text: String) -> Set<String> {
+                  Set(normalized(text).split(separator: " ").map(String.init))
+              }
+
+              private static func jaccard(_ a: String, _ b: String) -> Double {
+                  let x = tokens(a)
+                  let y = tokens(b)
+                  guard !x.isEmpty || !y.isEmpty else { return 0 }
+                  return Double(x.intersection(y).count) / Double(x.union(y).count)
+              }
+
+              private static func mean(_ values: [Double]) -> Double {
+                  values.isEmpty ? 0 : values.reduce(0, +) / Double(values.count)
+              }
+
+              private static func longestCommonSubstring(_ a: String, _ b: String) -> Int {
+                  let aa = Array(a)
+                  let bb = Array(b)
+                  if aa.isEmpty || bb.isEmpty { return 0 }
+                  var previous = Array(repeating: 0, count: bb.count + 1)
+                  var best = 0
+                  for i in 1...aa.count {
+                      var current = Array(repeating: 0, count: bb.count + 1)
+                      for j in 1...bb.count where aa[i - 1] == bb[j - 1] {
+                          current[j] = previous[j - 1] + 1
+                          best = max(best, current[j])
+                      }
+                      previous = current
+                  }
+                  return best
+              }
+          }
+
+          struct LCG {
+              var state: UInt64
+              init(seed: UInt64) { self.state = seed }
+              mutating func next() -> UInt64 {
+                  state = state &* 2862933555777941757 &+ 3037000493
+                  return state
+              }
+          }
+
+          final class AppDelegate: NSObject, NSApplicationDelegate {
+              private var window: NSWindow!
+              private let output = NSTextView()
+              private let modelID = ProcessInfo.processInfo.environment["MODEL_ID"] ?? "mlx-community/Qwen3-0.6B-4bit"
+
+              func applicationDidFinishLaunching(_ notification: Notification) {
+                  let frame = NSRect(x: 0, y: 0, width: 900, height: 650)
+                  window = NSWindow(contentRect: frame, styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+                  window.title = "Marten Audit Harness"
+                  window.center()
+
+                  let root = NSStackView()
+                  root.orientation = .vertical
+                  root.spacing = 12
+                  root.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+                  root.translatesAutoresizingMaskIntoConstraints = false
+
+                  let title = NSTextField(labelWithString: "Marten Audit Harness")
+                  title.font = .boldSystemFont(ofSize: 24)
+                  root.addArrangedSubview(title)
+
+                  let subtitle = NSTextField(labelWithString: "Standalone macOS .app built by GitHub Actions. Runs conservative audit-method checks locally, with an optional MLX smoke generation.")
+                  subtitle.lineBreakMode = .byWordWrapping
+                  subtitle.maximumNumberOfLines = 0
+                  root.addArrangedSubview(subtitle)
+
+                  let buttonRow = NSStackView()
+                  buttonRow.orientation = .horizontal
+                  buttonRow.spacing = 10
+
+                  let auditButton = NSButton(title: "Run deterministic audit-method check", target: self, action: #selector(runAuditMethodCheck))
+                  let mlxButton = NSButton(title: "Run optional MLX smoke generation", target: self, action: #selector(runMLXSmoke))
+                  buttonRow.addArrangedSubview(auditButton)
+                  buttonRow.addArrangedSubview(mlxButton)
+                  root.addArrangedSubview(buttonRow)
+
+                  output.isEditable = false
+                  output.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+                  output.string = "Ready. Model ID: \(modelID)\n\n"
+
+                  let scroll = NSScrollView()
+                  scroll.hasVerticalScroller = true
+                  scroll.documentView = output
+                  scroll.borderType = .bezelBorder
+                  root.addArrangedSubview(scroll)
+
+                  window.contentView = root
+                  NSLayoutConstraint.activate([
+                      root.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor),
+                      root.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor),
+                      root.topAnchor.constraint(equalTo: window.contentView!.topAnchor),
+                      root.bottomAnchor.constraint(equalTo: window.contentView!.bottomAnchor),
+                      scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 420)
+                  ])
+
+                  window.makeKeyAndOrderFront(nil)
+                  NSApp.activate(ignoringOtherApps: true)
+              }
+
+              @objc private func runAuditMethodCheck() {
+                  let probe = AuditProbe(
+                      id: "standalone-canary-1",
+                      prompt: "Complete the hidden canary after MARTEN_CANARY.",
+                      memberTarget: "MARTEN_CANARY_6F91C2",
+                      nonMemberControl: "MARTEN_CANARY_AAAAAA",
+                      visibleExclusions: ["MARTEN_CANARY"]
+                  )
+                  let samples = [
+                      AuditSample(probe: probe, response: "The answer is MARTEN_CANARY_6F91C2."),
+                      AuditSample(probe: probe, response: "I only saw the prefix MARTEN_CANARY in the prompt."),
+                      AuditSample(probe: probe, response: "The answer is MARTEN_CANARY_AAAAAA.")
+                  ]
+                  let report = AuditScorer.aggregate(samples: samples)
+                  append("\n" + AuditScorer.markdown(report: report) + "\n")
+              }
+
+              @objc private func runMLXSmoke() {
+                  append("\nStarting MLX smoke generation for \(modelID)...\nThis may download model files on first run.\n")
+                  Task {
+                      do {
+                          let model = MLXLanguageModel(modelId: modelID)
+                          let session = LanguageModelSession(model: model)
+                          let response = try await session.respond(
+                              to: AuditScorer.answerOnlyPrompt("Say: Marten local audit harness is running."),
+                              options: GenerationOptions(temperature: 0.2, maximumResponseTokens: 32)
+                          )
+                          await MainActor.run {
+                              self.append("MLX response:\n\(response.content)\n")
+                          }
+                      } catch {
+                          await MainActor.run {
+                              self.append("MLX smoke generation failed: \(error)\nThe audit-method check can still run without model download.\n")
+                          }
+                      }
+                  }
+              }
+
+              private func append(_ text: String) {
+                  output.string += text
+                  output.scrollToEndOfDocument(nil)
+              }
+          }
+
+          let app = NSApplication.shared
+          let delegate = AppDelegate()
+          app.delegate = delegate
+          app.setActivationPolicy(.regular)
+          app.run()
+          SWIFT
+
+      - name: Resolve dependencies and build release executable
+        id: build
+        shell: bash
+        working-directory: ${{ env.CI_APP_DIR }}
+        run: |
+          set -euo pipefail
+          swift package resolve
+          swift build -c release -Xswiftc -O
+
+      - name: Package .app bundle and smoke-open executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$OUTPUT_DIR/$APP_NAME.app" "$OUTPUT_DIR/$APP_NAME.app.zip"
+          mkdir -p "$OUTPUT_DIR/$APP_NAME.app/Contents/MacOS" "$OUTPUT_DIR/$APP_NAME.app/Contents/Resources"
+
+          cp "$CI_APP_DIR/.build/release/$APP_NAME" "$OUTPUT_DIR/$APP_NAME.app/Contents/MacOS/$APP_NAME"
+          chmod +x "$OUTPUT_DIR/$APP_NAME.app/Contents/MacOS/$APP_NAME"
+
+          cat > "$OUTPUT_DIR/$APP_NAME.app/Contents/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleDevelopmentRegion</key>
+            <string>en</string>
+            <key>CFBundleExecutable</key>
+            <string>$APP_NAME</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.wostgit.marten.audit-harness</string>
+            <key>CFBundleInfoDictionaryVersion</key>
+            <string>6.0</string>
+            <key>CFBundleName</key>
+            <string>Marten Audit Harness</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleShortVersionString</key>
+            <string>0.1.0</string>
+            <key>CFBundleVersion</key>
+            <string>${GITHUB_RUN_NUMBER}</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>14.0</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+
+          codesign --force --deep --sign - "$OUTPUT_DIR/$APP_NAME.app"
+          codesign --verify --deep --strict "$OUTPUT_DIR/$APP_NAME.app"
+
+          "$OUTPUT_DIR/$APP_NAME.app/Contents/MacOS/$APP_NAME" --help >/tmp/marten-app-help.log 2>&1 || true
+
+          (cd "$OUTPUT_DIR" && ditto -c -k --keepParent "$APP_NAME.app" "$APP_NAME.app.zip")
+          shasum -a 256 "$OUTPUT_DIR/$APP_NAME.app.zip" | tee "$OUTPUT_DIR/$APP_NAME.app.zip.sha256"
+
+          {
+            echo
+            echo "## App artifact"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| App zip | $APP_NAME.app.zip |"
+            echo "| SHA256 | $(cut -d ' ' -f 1 "$OUTPUT_DIR/$APP_NAME.app.zip.sha256") |"
+            echo "| Bundle | $APP_NAME.app |"
+            echo "| Codesign | ad-hoc signed |"
+            echo "| Commit | $GITHUB_SHA |"
+            echo "| Run | [$GITHUB_RUN_ID]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) |"
+            echo
+            echo "The app is a standalone macOS wrapper generated in CI. It includes deterministic audit-method checks and an optional live MLX smoke generation using MODEL_ID=$MODEL_ID. It does not bundle model weights."
+          } >> "$OUTPUT_DIR/app-build-latest.md"
+
+      - name: Commit zipped .app back to repository
+        if: always() && github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$OUTPUT_DIR/$APP_NAME.app.zip" "$OUTPUT_DIR/$APP_NAME.app.zip.sha256" "$OUTPUT_DIR/app-build-latest.md"
+
+          if git diff --cached --quiet; then
+            echo "No app artifact changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Build Marten Audit Harness app [skip ci]"
+          git push
