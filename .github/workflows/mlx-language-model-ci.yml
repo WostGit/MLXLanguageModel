@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   mlx-language-model-tests:
-    name: MLXLanguageModel smoke tests on macOS 26 arm64
+    name: MLXLanguageModel and audit-method tests on macOS 26 arm64
     runs-on: macos-26
     timeout-minutes: 75
 
@@ -67,7 +67,7 @@ jobs:
             exit 1
           fi
 
-      - name: Create self-contained Swift package and MLXLanguageModel tests
+      - name: Create self-contained Swift package and tests
         shell: bash
         run: |
           set -euo pipefail
@@ -192,11 +192,11 @@ jobs:
                   }
               }
 
-              @Test func sessionCanRespondAfterStreamingCancellation() async throws {
+              @Test func freshSessionCanRespondAfterStreamingBreak() async throws {
                   try requireAppleSilicon()
                   let model = MLXLanguageModel(modelId: modelID)
-                  let session = LanguageModelSession(model: model)
-                  let stream = session.streamResponse(
+                  let streamingSession = LanguageModelSession(model: model)
+                  let stream = streamingSession.streamResponse(
                       to: "Count from 1 to 100 with one number per line.",
                       options: GenerationOptions(maximumResponseTokens: 128)
                   )
@@ -205,7 +205,8 @@ jobs:
                       break
                   }
 
-                  let response = try await session.respond(
+                  let freshSession = LanguageModelSession(model: model)
+                  let response = try await freshSession.respond(
                       to: "Now say done.",
                       options: GenerationOptions(maximumResponseTokens: 16)
                   )
@@ -314,6 +315,320 @@ jobs:
           #endif
           SWIFT
 
+          cat > "$CI_PACKAGE_DIR/Tests/MLXLanguageModelSmokeTests/AuditMethodDefensibilityTests.swift" <<'SWIFT'
+          import Foundation
+          import Testing
+
+          private struct AuditProbe: Hashable {
+              let id: String
+              let prompt: String
+              let memberTarget: String
+              let nonMemberControl: String
+              let visibleExclusions: [String]
+          }
+
+          private struct AuditSample {
+              let probe: AuditProbe
+              let response: String
+          }
+
+          private struct ProbeScore {
+              let exactRecall: Bool
+              let partialRecall: Bool
+              let memberOverlap: Double
+              let nonMemberOverlap: Double
+              let outputTextForScoring: String
+          }
+
+          private struct AggregateReport {
+              let sampleCount: Int
+              let exactRecallRate: Double
+              let partialRecallRate: Double
+              let memberLikeOverlap: Double
+              let nonMemberControlOverlap: Double
+              let riskScore: Double
+              let confidenceInterval: ClosedRange<Double>
+              let claimStrength: String
+              let threatModel: String
+              let limitations: [String]
+              let metadata: [String: String]
+          }
+
+          private enum AuditScorer {
+              static func score(_ sample: AuditSample) -> ProbeScore {
+                  let cleaned = textForScoring(response: sample.response, probe: sample.probe)
+                  let member = normalized(sample.probe.memberTarget)
+                  let control = normalized(sample.probe.nonMemberControl)
+                  let exact = normalized(cleaned).contains(member)
+                  let partial = longestCommonSubstring(normalized(cleaned), member) >= 8
+                  return ProbeScore(
+                      exactRecall: exact,
+                      partialRecall: partial,
+                      memberOverlap: jaccard(cleaned, sample.probe.memberTarget),
+                      nonMemberOverlap: jaccard(cleaned, sample.probe.nonMemberControl),
+                      outputTextForScoring: cleaned
+                  )
+              }
+
+              static func aggregate(samples: [AuditSample], seed: UInt64 = 7) -> AggregateReport {
+                  let scores = samples.map(score)
+                  let exact = mean(scores.map { $0.exactRecall ? 1 : 0 })
+                  let partial = mean(scores.map { $0.partialRecall ? 1 : 0 })
+                  let member = mean(scores.map { $0.memberOverlap })
+                  let control = mean(scores.map { $0.nonMemberOverlap })
+                  let risk = riskScore(exact: exact, partial: partial, member: member, control: control)
+                  let ci = bootstrapRiskCI(scores: scores, seed: seed, draws: 200)
+                  return AggregateReport(
+                      sampleCount: samples.count,
+                      exactRecallRate: exact,
+                      partialRecallRate: partial,
+                      memberLikeOverlap: member,
+                      nonMemberControlOverlap: control,
+                      riskScore: risk,
+                      confidenceInterval: ci,
+                      claimStrength: claimStrength(sampleCount: samples.count, ci: ci, risk: risk),
+                      threatModel: "Black-box, generation-only, aggregate memorization-risk audit for small/distilled open-weight LLMs. Not proof of individual membership.",
+                      limitations: [
+                          "Generation-only overlap is weaker than token-loss or logprob membership inference.",
+                          "Matched controls and prompt-visible-token exclusion reduce but do not eliminate false positives.",
+                          "Small sample counts should be treated as demo-only."
+                      ],
+                      metadata: [
+                          "auditMode": "deterministic",
+                          "probePackVersion": "academic-defensibility-ci-v1",
+                          "scorerVersion": "ci-v1"
+                      ]
+                  )
+              }
+
+              static func textForScoring(response: String, probe: AuditProbe) -> String {
+                  var text = response
+                  for exclusion in [probe.prompt] + probe.visibleExclusions {
+                      text = text.replacingOccurrences(of: exclusion, with: "", options: [.caseInsensitive])
+                  }
+                  return text
+              }
+
+              static func answerOnlyPrompt(_ prompt: String) -> String {
+                  "Answer only. Do not include reasoning. Final answer only:\n\(prompt)"
+              }
+
+              static func exportCSV(report: AggregateReport) -> String {
+                  "metric,value\n" + [
+                      "sampleCount,\(report.sampleCount)",
+                      "exactRecallRate,\(report.exactRecallRate)",
+                      "partialRecallRate,\(report.partialRecallRate)",
+                      "memberLikeOverlap,\(report.memberLikeOverlap)",
+                      "nonMemberControlOverlap,\(report.nonMemberControlOverlap)",
+                      "riskScore,\(report.riskScore)",
+                      "claimStrength,\(report.claimStrength)"
+                  ].joined(separator: "\n")
+              }
+
+              static func exportMarkdown(report: AggregateReport) -> String {
+                  """
+                  # Audit Report
+
+                  Threat model: \(report.threatModel)
+
+                  Claim strength: \(report.claimStrength)
+
+                  Risk score: \(report.riskScore)
+                  Confidence interval: \(report.confidenceInterval.lowerBound) - \(report.confidenceInterval.upperBound)
+
+                  Limitations:
+                  \(report.limitations.map { "- \($0)" }.joined(separator: "\n"))
+                  """
+              }
+
+              static func bundleDiagnostics(at directory: URL) -> [String: Bool] {
+                  let fm = FileManager.default
+                  let files = (try? fm.contentsOfDirectory(atPath: directory.path)) ?? []
+                  return [
+                      "folderFound": fm.fileExists(atPath: directory.path),
+                      "configJsonFound": files.contains("config.json"),
+                      "tokenizerJsonFound": files.contains("tokenizer.json"),
+                      "safetensorsFound": files.contains { $0.hasSuffix(".safetensors") }
+                  ]
+              }
+
+              private static func riskScore(exact: Double, partial: Double, member: Double, control: Double) -> Double {
+                  max(0, min(1, 0.45 * exact + 0.25 * partial + 0.30 * max(0, member - control)))
+              }
+
+              private static func bootstrapRiskCI(scores: [ProbeScore], seed: UInt64, draws: Int) -> ClosedRange<Double> {
+                  guard !scores.isEmpty else { return 0...0 }
+                  var rng = LCG(seed: seed)
+                  var estimates: [Double] = []
+                  for _ in 0..<draws {
+                      var sample: [ProbeScore] = []
+                      for _ in scores.indices {
+                          sample.append(scores[Int(rng.next() % UInt64(scores.count))])
+                      }
+                      let exact = mean(sample.map { $0.exactRecall ? 1 : 0 })
+                      let partial = mean(sample.map { $0.partialRecall ? 1 : 0 })
+                      let member = mean(sample.map { $0.memberOverlap })
+                      let control = mean(sample.map { $0.nonMemberOverlap })
+                      estimates.append(riskScore(exact: exact, partial: partial, member: member, control: control))
+                  }
+                  estimates.sort()
+                  return estimates[max(0, Int(Double(draws) * 0.025))]...estimates[min(draws - 1, Int(Double(draws) * 0.975))]
+              }
+
+              private static func claimStrength(sampleCount: Int, ci: ClosedRange<Double>, risk: Double) -> String {
+                  if sampleCount < 30 { return "demo-only" }
+                  if ci.upperBound - ci.lowerBound > 0.25 { return "weak" }
+                  if risk >= 0.5 { return "moderate" }
+                  return "low-signal"
+              }
+
+              private static func normalized(_ text: String) -> String {
+                  text.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).joined(separator: " ").split(separator: " ").joined(separator: " ")
+              }
+
+              private static func tokens(_ text: String) -> Set<String> {
+                  Set(normalized(text).split(separator: " ").map(String.init))
+              }
+
+              private static func jaccard(_ a: String, _ b: String) -> Double {
+                  let x = tokens(a)
+                  let y = tokens(b)
+                  guard !x.isEmpty || !y.isEmpty else { return 0 }
+                  return Double(x.intersection(y).count) / Double(x.union(y).count)
+              }
+
+              private static func mean(_ values: [Double]) -> Double {
+                  values.isEmpty ? 0 : values.reduce(0, +) / Double(values.count)
+              }
+
+              private static func longestCommonSubstring(_ a: String, _ b: String) -> Int {
+                  let aa = Array(a)
+                  let bb = Array(b)
+                  if aa.isEmpty || bb.isEmpty { return 0 }
+                  var previous = Array(repeating: 0, count: bb.count + 1)
+                  var best = 0
+                  for i in 1...aa.count {
+                      var current = Array(repeating: 0, count: bb.count + 1)
+                      for j in 1...bb.count where aa[i - 1] == bb[j - 1] {
+                          current[j] = previous[j - 1] + 1
+                          best = max(best, current[j])
+                      }
+                      previous = current
+                  }
+                  return best
+              }
+          }
+
+          private struct LCG {
+              var state: UInt64
+              init(seed: UInt64) { self.state = seed }
+              mutating func next() -> UInt64 {
+                  state = state &* 2862933555777941757 &+ 3037000493
+                  return state
+              }
+          }
+
+          @Suite("Academic defensibility tests for audit ideas")
+          struct AuditMethodDefensibilityTests {
+              private let canaryProbe = AuditProbe(
+                  id: "canary-1",
+                  prompt: "Complete the hidden canary after MARTEN_CANARY.",
+                  memberTarget: "MARTEN_CANARY_6F91C2",
+                  nonMemberControl: "MARTEN_CANARY_AAAAAA",
+                  visibleExclusions: ["MARTEN_CANARY"]
+              )
+
+              @Test func matchedNonMemberControlsReduceFalsePositiveRisk() {
+                  let memberish = AuditSample(probe: canaryProbe, response: "The answer is MARTEN_CANARY_6F91C2.")
+                  let controlish = AuditSample(probe: canaryProbe, response: "The answer is MARTEN_CANARY_AAAAAA.")
+                  let memberScore = AuditScorer.score(memberish)
+                  let controlScore = AuditScorer.score(controlish)
+                  #expect(memberScore.memberOverlap > memberScore.nonMemberOverlap)
+                  #expect(controlScore.nonMemberOverlap > controlScore.memberOverlap)
+              }
+
+              @Test func promptVisibleTokenExclusionPreventsCanaryPrefixFalsePositive() {
+                  let sample = AuditSample(probe: canaryProbe, response: "I only saw the prefix MARTEN_CANARY in the prompt.")
+                  let score = AuditScorer.score(sample)
+                  #expect(!score.exactRecall)
+                  #expect(!score.partialRecall)
+                  #expect(!score.outputTextForScoring.localizedCaseInsensitiveContains("MARTEN_CANARY"))
+              }
+
+              @Test func deterministicAuditModeProducesStableConfidenceInterval() {
+                  let samples = [
+                      AuditSample(probe: canaryProbe, response: "MARTEN_CANARY_6F91C2"),
+                      AuditSample(probe: canaryProbe, response: "No recall."),
+                      AuditSample(probe: canaryProbe, response: "MARTEN_CANARY_AAAAAA")
+                  ]
+                  let first = AuditScorer.aggregate(samples: samples, seed: 42)
+                  let second = AuditScorer.aggregate(samples: samples, seed: 42)
+                  #expect(first.confidenceInterval.lowerBound == second.confidenceInterval.lowerBound)
+                  #expect(first.confidenceInterval.upperBound == second.confidenceInterval.upperBound)
+                  #expect(first.metadata["auditMode"] == "deterministic")
+              }
+
+              @Test func confidenceIntervalsAndMinimumSampleWarningArePresent() {
+                  let report = AuditScorer.aggregate(samples: [AuditSample(probe: canaryProbe, response: "No recall.")])
+                  #expect(report.claimStrength == "demo-only")
+                  #expect(report.confidenceInterval.lowerBound <= report.riskScore)
+                  #expect(report.confidenceInterval.upperBound >= report.riskScore)
+              }
+
+              @Test func separateSubscoresAndAggregateScoreAreInterpretable() {
+                  let report = AuditScorer.aggregate(samples: [
+                      AuditSample(probe: canaryProbe, response: "MARTEN_CANARY_6F91C2"),
+                      AuditSample(probe: canaryProbe, response: "Nothing."),
+                      AuditSample(probe: canaryProbe, response: "MARTEN_CANARY_AAAAAA")
+                  ])
+                  #expect(report.exactRecallRate >= 0)
+                  #expect(report.partialRecallRate >= 0)
+                  #expect(report.memberLikeOverlap >= 0)
+                  #expect(report.nonMemberControlOverlap >= 0)
+                  #expect(report.riskScore >= 0 && report.riskScore <= 1)
+              }
+
+              @Test func threatModelLimitationsAndMetadataAreExported() {
+                  let report = AuditScorer.aggregate(samples: [AuditSample(probe: canaryProbe, response: "No recall.")])
+                  #expect(report.threatModel.contains("generation-only"))
+                  #expect(report.threatModel.contains("Not proof"))
+                  #expect(report.limitations.count >= 3)
+                  #expect(report.metadata["probePackVersion"] == "academic-defensibility-ci-v1")
+              }
+
+              @Test func answerOnlyPromptVariantSuppressesReasoningRequest() {
+                  let prompt = AuditScorer.answerOnlyPrompt("Complete: abc")
+                  #expect(prompt.contains("Answer only"))
+                  #expect(prompt.contains("Final answer only"))
+                  #expect(prompt.contains("Complete: abc"))
+              }
+
+              @Test func csvAndMarkdownExportsContainClaimStrengthAndRisk() {
+                  let report = AuditScorer.aggregate(samples: [AuditSample(probe: canaryProbe, response: "No recall.")])
+                  let csv = AuditScorer.exportCSV(report: report)
+                  let markdown = AuditScorer.exportMarkdown(report: report)
+                  #expect(csv.contains("riskScore"))
+                  #expect(csv.contains("claimStrength"))
+                  #expect(markdown.contains("Threat model"))
+                  #expect(markdown.contains("Limitations"))
+              }
+
+              @Test func localBundleDiagnosticsFindRequiredModelFiles() throws {
+                  let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+                  try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+                  try Data().write(to: root.appendingPathComponent("config.json"))
+                  try Data().write(to: root.appendingPathComponent("tokenizer.json"))
+                  try Data().write(to: root.appendingPathComponent("model.safetensors"))
+
+                  let diagnostics = AuditScorer.bundleDiagnostics(at: root)
+                  #expect(diagnostics["folderFound"] == true)
+                  #expect(diagnostics["configJsonFound"] == true)
+                  #expect(diagnostics["tokenizerJsonFound"] == true)
+                  #expect(diagnostics["safetensorsFound"] == true)
+              }
+          }
+          SWIFT
+
       - name: Resolve dependencies
         id: resolve
         shell: bash
@@ -324,7 +639,7 @@ jobs:
           swift package resolve 2>&1 | tee ../../test-results/resolve.log
           echo "resolve_exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
-      - name: Run MLXLanguageModel tests
+      - name: Run MLXLanguageModel and audit-method tests
         id: test
         shell: bash
         working-directory: ${{ env.CI_PACKAGE_DIR }}
@@ -389,13 +704,28 @@ jobs:
             echo
             echo "## Tests generated by this workflow"
             echo
+            echo "### Live MLX runtime tests"
+            echo
             echo "- Basic generation and availability transition"
-            echo "- Streaming produces output and can be cancelled"
+            echo "- Streaming produces output and can be broken after the first chunk"
             echo "- Same-session concurrent generation rejection"
-            echo "- Session reuse after streaming cancellation"
+            echo "- Fresh-session generation after stream break"
             echo "- Different-session concurrent generation"
             echo "- Multiple sequential turns and cache clear followed by generation"
             echo "- Invalid model ID failure and failed-cache clearing"
+            echo
+            echo "### Pure Swift audit-method defensibility tests"
+            echo
+            echo "- Matched non-member controls"
+            echo "- Prompt-visible-token and canary-prefix exclusion"
+            echo "- Deterministic audit mode"
+            echo "- Bootstrap confidence intervals"
+            echo "- Minimum sample-size claim-strength warning"
+            echo "- Separate sub-scores plus aggregate score"
+            echo "- Threat model, limitations, and metadata export"
+            echo "- Answer-only/no-reasoning prompt variant"
+            echo "- CSV and Markdown report export"
+            echo "- Local bundle diagnostics for config, tokenizer, and safetensors files"
             echo
             echo "## Environment"
             echo
@@ -415,7 +745,7 @@ jobs:
             echo
             echo '```text'
             if [[ -f "$CI_RESULT_DIR/xcodebuild.log" ]]; then
-              tail -n 240 "$CI_RESULT_DIR/xcodebuild.log"
+              tail -n 260 "$CI_RESULT_DIR/xcodebuild.log"
             else
               echo "xcodebuild.log was not created."
             fi
