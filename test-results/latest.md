@@ -3,12 +3,12 @@
 | Field | Value |
 | --- | --- |
 | Status | passed |
-| Date UTC | 2026-11-16 11:43:54 UTC |
+| Date UTC | 2026-11-23 13:11:58 UTC |
 | Workflow | MLXLanguageModel CI |
-| Run | [43859207865](https://github.com/WostGit/MLXLanguageModel/actions/runs/43859207865) |
-| Commit | fd6de032ef35acc7fab84756c4da83f76c436792 |
+| Run | [45180055987](https://github.com/WostGit/MLXLanguageModel/actions/runs/45180055987) |
+| Commit | fe680b86c3df593ee877929199617b9ff8ef61bf |
 | Runner label | macos-26 |
-| Runner name | GitHub Actions 1000007419 |
+| Runner name | GitHub Actions 1000007445 |
 | Runner OS | macOS |
 | Runner arch | ARM64 |
 | Machine | arm64 |
@@ -45,11 +45,11 @@
 
 # Runner environment
 
-- Date UTC: 2026-11-16 11:36:30 UTC
-- Runner: GitHub Actions 1000007419
+- Date UTC: 2026-11-23 13:03:04 UTC
+- Runner: GitHub Actions 1000007445
 - Runner OS: macOS
 - Runner arch: ARM64
-- Kernel: Darwin sat12-bq154-55aa5847-f79a-4a8b-862b-d2129f64c730-BAC53EF94E90.local 25.6.0 Darwin Kernel Version 25.6.0: Mon Oct 12 00:39:04 PDT 2026; root:xnu-12377.161.15.701.48~2/RELEASE_ARM64_VMAPPLE arm64
+- Kernel: Darwin sat12-dp152-10e8a2ec-d1cc-4da9-973c-f35931938ab4-92D4C9C418E2.local 25.6.0 Darwin Kernel Version 25.6.0: Mon Oct 12 00:39:04 PDT 2026; root:xnu-12377.161.15.701.48~2/RELEASE_ARM64_VMAPPLE arm64
 - Machine: arm64
 - Swift:
   - Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)
@@ -62,111 +62,111 @@
 
 ```text
 Fetching https://github.com/huggingface/AnyLanguageModel.git
-[1/10850] Fetching anylanguagemodel
-Fetched https://github.com/huggingface/AnyLanguageModel.git from cache (1.42s)
+[1/11194] Fetching anylanguagemodel
+Fetched https://github.com/huggingface/AnyLanguageModel.git from cache (1.83s)
 Fetching https://github.com/apple/swift-http-types
 Fetching https://github.com/swiftlang/swift-syntax
-[1/1976] Fetching swift-http-types
-[1977/84134] Fetching swift-http-types, swift-syntax
-Fetched https://github.com/apple/swift-http-types from cache (4.07s)
-Fetched https://github.com/swiftlang/swift-syntax from cache (4.07s)
+[1/1990] Fetching swift-http-types
+[1991/84269] Fetching swift-http-types, swift-syntax
+Fetched https://github.com/apple/swift-http-types from cache (4.32s)
+Fetched https://github.com/swiftlang/swift-syntax from cache (4.32s)
 Fetching https://github.com/ml-explore/mlx-swift-lm
+Fetching https://github.com/mattt/JSONSchema
+[1/206] Fetching jsonschema
+Fetched https://github.com/mattt/JSONSchema from cache (0.55s)
 Fetching https://github.com/mattt/EventSource
 [1/333] Fetching eventsource
-Fetched https://github.com/mattt/EventSource from cache (0.44s)
+Fetched https://github.com/mattt/EventSource from cache (0.45s)
 Fetching https://github.com/huggingface/swift-huggingface
-[1/3110] Fetching swift-huggingface
-Fetched https://github.com/huggingface/swift-huggingface from cache (0.66s)
+[1/3155] Fetching swift-huggingface
+Fetched https://github.com/huggingface/swift-huggingface from cache (0.64s)
 Fetching https://github.com/huggingface/swift-transformers
-[1/27060] Fetching mlx-swift-lm
-[17320/34605] Fetching mlx-swift-lm, swift-transformers
-Fetched https://github.com/huggingface/swift-transformers from cache (1.17s)
-Fetching https://github.com/mattt/JSONSchema
-[18672/27060] Fetching mlx-swift-lm
-[27061/27266] Fetching mlx-swift-lm, jsonschema
-Fetched https://github.com/mattt/JSONSchema from cache (0.57s)
-Fetched https://github.com/ml-explore/mlx-swift-lm from cache (3.42s)
+[1/28637] Fetching mlx-swift-lm
+[11170/36182] Fetching mlx-swift-lm, swift-transformers
+Fetched https://github.com/huggingface/swift-transformers from cache (1.03s)
+[21765/28637] Fetching mlx-swift-lm
+Fetched https://github.com/ml-explore/mlx-swift-lm from cache (3.69s)
 Computing version for https://github.com/swiftlang/swift-syntax
-Computed https://github.com/swiftlang/swift-syntax at 602.0.0 (13.50s)
+Computed https://github.com/swiftlang/swift-syntax at 602.0.0 (14.28s)
 Computing version for https://github.com/ml-explore/mlx-swift-lm
-Computed https://github.com/ml-explore/mlx-swift-lm at 3.32.3 (0.50s)
+Computed https://github.com/ml-explore/mlx-swift-lm at 3.32.3 (0.94s)
 Fetching https://github.com/ml-explore/mlx-swift
-[1/17743] Fetching mlx-swift
-Fetched https://github.com/ml-explore/mlx-swift from cache (1.83s)
+[1/17767] Fetching mlx-swift
+Fetched https://github.com/ml-explore/mlx-swift from cache (1.82s)
 Computing version for https://github.com/mattt/EventSource
 Computed https://github.com/mattt/EventSource at 1.6.0 (2.31s)
-Computing version for https://github.com/huggingface/swift-huggingface
-Computed https://github.com/huggingface/swift-huggingface at 1.0.0 (0.40s)
-Fetching https://github.com/apple/swift-crypto.git
-[1/18948] Fetching swift-crypto
-Fetched https://github.com/apple/swift-crypto.git from cache (1.34s)
 Computing version for https://github.com/ml-explore/mlx-swift
-Computed https://github.com/ml-explore/mlx-swift at 0.32.3 (1.77s)
+Computed https://github.com/ml-explore/mlx-swift at 0.32.3 (0.54s)
 Fetching https://github.com/apple/swift-numerics
-[1/6858] Fetching swift-numerics
-Fetched https://github.com/apple/swift-numerics from cache (0.65s)
+[1/6862] Fetching swift-numerics
+Fetched https://github.com/apple/swift-numerics from cache (0.67s)
 Computing version for https://github.com/mattt/JSONSchema
-Computed https://github.com/mattt/JSONSchema at 1.3.1 (1.02s)
+Computed https://github.com/mattt/JSONSchema at 1.3.1 (1.07s)
 Fetching https://github.com/apple/swift-collections.git
-[1/30032] Fetching swift-collections
-Fetched https://github.com/apple/swift-collections.git from cache (1.39s)
+[1/30493] Fetching swift-collections
+Fetched https://github.com/apple/swift-collections.git from cache (2.06s)
+Computing version for https://github.com/huggingface/swift-huggingface
+Computed https://github.com/huggingface/swift-huggingface at 1.0.1 (2.65s)
+Fetching https://github.com/apple/swift-crypto.git
+[1/19010] Fetching swift-crypto
+Fetched https://github.com/apple/swift-crypto.git from cache (1.83s)
 Computing version for https://github.com/apple/swift-http-types
-Computed https://github.com/apple/swift-http-types at 1.8.0 (1.89s)
+Computed https://github.com/apple/swift-http-types at 1.8.0 (2.66s)
 Computing version for https://github.com/apple/swift-numerics
-Computed https://github.com/apple/swift-numerics at 1.1.1 (0.59s)
+Computed https://github.com/apple/swift-numerics at 1.1.1 (0.62s)
 Computing version for https://github.com/huggingface/swift-transformers
-Computed https://github.com/huggingface/swift-transformers at 1.4.0 (0.61s)
+Computed https://github.com/huggingface/swift-transformers at 1.4.0 (0.70s)
 Fetching https://github.com/huggingface/swift-jinja.git
 Fetching https://github.com/ibireme/yyjson.git
-[1/2236] Fetching swift-jinja
-[2237/7534] Fetching swift-jinja, yyjson
-Fetched https://github.com/huggingface/swift-jinja.git from cache (1.18s)
-Fetched https://github.com/ibireme/yyjson.git from cache (1.19s)
+[1/2508] Fetching swift-jinja
+[2509/7866] Fetching swift-jinja, yyjson
+Fetched https://github.com/huggingface/swift-jinja.git from cache (1.48s)
+Fetched https://github.com/ibireme/yyjson.git from cache (1.49s)
 Computing version for https://github.com/ibireme/yyjson.git
-Computed https://github.com/ibireme/yyjson.git at 0.13.0 (1.73s)
+Computed https://github.com/ibireme/yyjson.git at 0.13.0 (2.05s)
 Computing version for https://github.com/huggingface/swift-jinja.git
-Computed https://github.com/huggingface/swift-jinja.git at 3.1.0 (0.42s)
+Computed https://github.com/huggingface/swift-jinja.git at 3.2.1 (0.44s)
 Computing version for https://github.com/apple/swift-collections.git
-Computed https://github.com/apple/swift-collections.git at 1.7.6 (0.55s)
+Computed https://github.com/apple/swift-collections.git at 1.7.6 (0.90s)
 Computing version for https://github.com/apple/swift-crypto.git
-Computed https://github.com/apple/swift-crypto.git at 4.5.2 (4.20s)
+Computed https://github.com/apple/swift-crypto.git at 4.5.2 (4.80s)
 Fetching https://github.com/apple/swift-asn1.git
-[1/2077] Fetching swift-asn1
-Fetched https://github.com/apple/swift-asn1.git from cache (0.63s)
+[1/2082] Fetching swift-asn1
+Fetched https://github.com/apple/swift-asn1.git from cache (1.07s)
 Computing version for https://github.com/apple/swift-asn1.git
-Computed https://github.com/apple/swift-asn1.git at 1.7.4 (1.30s)
-Creating working copy for https://github.com/ml-explore/mlx-swift
-Working copy of https://github.com/ml-explore/mlx-swift resolved at 0.32.3
-Creating working copy for https://github.com/ibireme/yyjson.git
-Working copy of https://github.com/ibireme/yyjson.git resolved at 0.13.0
-Creating working copy for https://github.com/apple/swift-collections.git
-Working copy of https://github.com/apple/swift-collections.git resolved at 1.7.6
-Creating working copy for https://github.com/apple/swift-asn1.git
-Working copy of https://github.com/apple/swift-asn1.git resolved at 1.7.4
-Creating working copy for https://github.com/huggingface/swift-huggingface
-Working copy of https://github.com/huggingface/swift-huggingface resolved at 1.0.0
-Creating working copy for https://github.com/ml-explore/mlx-swift-lm
-Working copy of https://github.com/ml-explore/mlx-swift-lm resolved at 3.32.3
-Creating working copy for https://github.com/apple/swift-http-types
-Working copy of https://github.com/apple/swift-http-types resolved at 1.8.0
+Computed https://github.com/apple/swift-asn1.git at 1.7.4 (1.78s)
 Creating working copy for https://github.com/swiftlang/swift-syntax
 Working copy of https://github.com/swiftlang/swift-syntax resolved at 602.0.0
-Creating working copy for https://github.com/huggingface/swift-jinja.git
-Working copy of https://github.com/huggingface/swift-jinja.git resolved at 3.1.0
-Creating working copy for https://github.com/mattt/JSONSchema
-Working copy of https://github.com/mattt/JSONSchema resolved at 1.3.1
-Creating working copy for https://github.com/mattt/EventSource
-Working copy of https://github.com/mattt/EventSource resolved at 1.6.0
 Creating working copy for https://github.com/apple/swift-crypto.git
 Working copy of https://github.com/apple/swift-crypto.git resolved at 4.5.2
-Creating working copy for https://github.com/apple/swift-numerics
-Working copy of https://github.com/apple/swift-numerics resolved at 1.1.1
-Creating working copy for https://github.com/huggingface/AnyLanguageModel.git
-Working copy of https://github.com/huggingface/AnyLanguageModel.git resolved at main (8b0d698)
+Creating working copy for https://github.com/mattt/EventSource
+Working copy of https://github.com/mattt/EventSource resolved at 1.6.0
+Creating working copy for https://github.com/apple/swift-http-types
+Working copy of https://github.com/apple/swift-http-types resolved at 1.8.0
+Creating working copy for https://github.com/ml-explore/mlx-swift
+Working copy of https://github.com/ml-explore/mlx-swift resolved at 0.32.3
+Creating working copy for https://github.com/huggingface/swift-huggingface
+Working copy of https://github.com/huggingface/swift-huggingface resolved at 1.0.1
 Creating working copy for https://github.com/huggingface/swift-transformers
 Working copy of https://github.com/huggingface/swift-transformers resolved at 1.4.0
+Creating working copy for https://github.com/apple/swift-collections.git
+Working copy of https://github.com/apple/swift-collections.git resolved at 1.7.6
+Creating working copy for https://github.com/ml-explore/mlx-swift-lm
+Working copy of https://github.com/ml-explore/mlx-swift-lm resolved at 3.32.3
+Creating working copy for https://github.com/apple/swift-numerics
+Working copy of https://github.com/apple/swift-numerics resolved at 1.1.1
+Creating working copy for https://github.com/mattt/JSONSchema
+Working copy of https://github.com/mattt/JSONSchema resolved at 1.3.1
+Creating working copy for https://github.com/huggingface/AnyLanguageModel.git
+Working copy of https://github.com/huggingface/AnyLanguageModel.git resolved at main (ad3c5a1)
+Creating working copy for https://github.com/apple/swift-asn1.git
+Working copy of https://github.com/apple/swift-asn1.git resolved at 1.7.4
+Creating working copy for https://github.com/ibireme/yyjson.git
+Working copy of https://github.com/ibireme/yyjson.git resolved at 0.13.0
+Creating working copy for https://github.com/huggingface/swift-jinja.git
+Working copy of https://github.com/huggingface/swift-jinja.git resolved at 3.2.1
 Downloading package prebuilt https://download.swift.org/prebuilts/swift-syntax/602.0.0/swiftlang-6.3.3.1.3-macosx26.5-MacroSupport.zip
-Downloaded https://download.swift.org/prebuilts/swift-syntax/602.0.0/swiftlang-6.3.3.1.3-macosx26.5-MacroSupport.zip (0.70s)
+Downloaded https://download.swift.org/prebuilts/swift-syntax/602.0.0/swiftlang-6.3.3.1.3-macosx26.5-MacroSupport.zip (0.78s)
 ```
 
 ## xcodebuild log tail
@@ -188,7 +188,7 @@ static MTL_CONST constexpr int RMS_LOOPED_LIMIT = 4096;
 mlx/backend/metal/kernels/unary_ops.h:9:16: warning: unused variable 'inf' [-Wunused-const-variable]
 constant float inf = metal::numeric_limits<float>::infinity();
                ^
-2026-11-16 11:43:40.619321+0000 xctest[13846:40643] [Metal Compiler Warning] Warning: Compilation succeeded with: 
+2026-11-23 13:11:43.860509+0000 xctest[15172:44131] [Metal Compiler Warning] Warning: Compilation succeeded with: 
 
 mlx/backend/metal/kernels/defines.h:10:32: warning: unused variable 'MAX_REDUCE_SPECIALIZED_DIMS' [-Wunused-const-variable]
 static MTL_CONST constexpr int MAX_REDUCE_SPECIALIZED_DIMS = 4;
@@ -208,7 +208,7 @@ static MTL_CONST constexpr int RMS_N_READS = 4;
 mlx/backend/metal/kernels/defines.h:15:32: warning: unused variable 'RMS_LOOPED_LIMIT' [-Wunused-const-variable]
 static MTL_CONST constexpr int RMS_LOOPED_LIMIT = 4096;
                                ^
-2026-11-16 11:43:40.724588+0000 xctest[13846:40643] [Metal Compiler Warning] Warning: Compilation succeeded with: 
+2026-11-23 13:11:43.944955+0000 xctest[15172:44131] [Metal Compiler Warning] Warning: Compilation succeeded with: 
 
 mlx/backend/metal/kernels/defines.h:10:32: warning: unused variable 'MAX_REDUCE_SPECIALIZED_DIMS' [-Wunused-const-variable]
 static MTL_CONST constexpr int MAX_REDUCE_SPECIALIZED_DIMS = 4;
@@ -228,7 +228,7 @@ static MTL_CONST constexpr int RMS_N_READS = 4;
 mlx/backend/metal/kernels/defines.h:15:32: warning: unused variable 'RMS_LOOPED_LIMIT' [-Wunused-const-variable]
 static MTL_CONST constexpr int RMS_LOOPED_LIMIT = 4096;
                                ^
-2026-11-16 11:43:40.840806+0000 xctest[13846:40643] [Metal Compiler Warning] Warning: Compilation succeeded with: 
+2026-11-23 13:11:44.039714+0000 xctest[15172:44131] [Metal Compiler Warning] Warning: Compilation succeeded with: 
 
 mlx/backend/metal/kernels/defines.h:10:32: warning: unused variable 'MAX_REDUCE_SPECIALIZED_DIMS' [-Wunused-const-variable]
 static MTL_CONST constexpr int MAX_REDUCE_SPECIALIZED_DIMS = 4;
@@ -248,7 +248,7 @@ static MTL_CONST constexpr int RMS_N_READS = 4;
 mlx/backend/metal/kernels/defines.h:15:32: warning: unused variable 'RMS_LOOPED_LIMIT' [-Wunused-const-variable]
 static MTL_CONST constexpr int RMS_LOOPED_LIMIT = 4096;
                                ^
-2026-11-16 11:43:40.953781+0000 xctest[13846:40643] [Metal Compiler Warning] Warning: Compilation succeeded with: 
+2026-11-23 13:11:44.147558+0000 xctest[15172:44131] [Metal Compiler Warning] Warning: Compilation succeeded with: 
 
 mlx/backend/metal/kernels/defines.h:10:32: warning: unused variable 'MAX_REDUCE_SPECIALIZED_DIMS' [-Wunused-const-variable]
 static MTL_CONST constexpr int MAX_REDUCE_SPECIALIZED_DIMS = 4;
@@ -265,7 +265,7 @@ static MTL_CONST constexpr int RMS_LOOPED_LIMIT = 4096;
 mlx/backend/metal/kernels/atomic.h:164:25: warning: unused variable 'packing_size' [-Wunused-const-variable]
 constexpr constant uint packing_size = sizeof(uint) / sizeof(T);
                         ^
-2026-11-16 11:43:41.133312+0000 xctest[13846:40643] [Metal Compiler Warning] Warning: Compilation succeeded with: 
+2026-11-23 13:11:44.330441+0000 xctest[15172:44131] [Metal Compiler Warning] Warning: Compilation succeeded with: 
 
 mlx/backend/metal/kernels/defines.h:10:32: warning: unused variable 'MAX_REDUCE_SPECIALIZED_DIMS' [-Wunused-const-variable]
 static MTL_CONST constexpr int MAX_REDUCE_SPECIALIZED_DIMS = 4;
@@ -285,7 +285,7 @@ static MTL_CONST constexpr int RMS_N_READS = 4;
 mlx/backend/metal/kernels/defines.h:15:32: warning: unused variable 'RMS_LOOPED_LIMIT' [-Wunused-const-variable]
 static MTL_CONST constexpr int RMS_LOOPED_LIMIT = 4096;
                                ^
-2026-11-16 11:43:41.311480+0000 xctest[13846:40643] [Metal Compiler Warning] Warning: Compilation succeeded with: 
+2026-11-23 13:11:44.580929+0000 xctest[15172:44131] [Metal Compiler Warning] Warning: Compilation succeeded with: 
 
 mlx/backend/metal/kernels/defines.h:10:32: warning: unused variable 'MAX_REDUCE_SPECIALIZED_DIMS' [-Wunused-const-variable]
 static MTL_CONST constexpr int MAX_REDUCE_SPECIALIZED_DIMS = 4;
@@ -305,7 +305,7 @@ static MTL_CONST constexpr int RMS_N_READS = 4;
 mlx/backend/metal/kernels/defines.h:15:32: warning: unused variable 'RMS_LOOPED_LIMIT' [-Wunused-const-variable]
 static MTL_CONST constexpr int RMS_LOOPED_LIMIT = 4096;
                                ^
-2026-11-16 11:43:41.459431+0000 xctest[13846:40643] [Metal Compiler Warning] Warning: Compilation succeeded with: 
+2026-11-23 13:11:44.768522+0000 xctest[15172:44131] [Metal Compiler Warning] Warning: Compilation succeeded with: 
 
 mlx/backend/metal/kernels/defines.h:10:32: warning: unused variable 'MAX_REDUCE_SPECIALIZED_DIMS' [-Wunused-const-variable]
 static MTL_CONST constexpr int MAX_REDUCE_SPECIALIZED_DIMS = 4;
@@ -325,7 +325,7 @@ static MTL_CONST constexpr int RMS_N_READS = 4;
 mlx/backend/metal/kernels/defines.h:15:32: warning: unused variable 'RMS_LOOPED_LIMIT' [-Wunused-const-variable]
 static MTL_CONST constexpr int RMS_LOOPED_LIMIT = 4096;
                                ^
-2026-11-16 11:43:41.544084+0000 xctest[13846:40643] [Metal Compiler Warning] Warning: Compilation succeeded with: 
+2026-11-23 13:11:44.879634+0000 xctest[15172:44131] [Metal Compiler Warning] Warning: Compilation succeeded with: 
 
 mlx/backend/metal/kernels/defines.h:10:32: warning: unused variable 'MAX_REDUCE_SPECIALIZED_DIMS' [-Wunused-const-variable]
 static MTL_CONST constexpr int MAX_REDUCE_SPECIALIZED_DIMS = 4;
@@ -345,7 +345,7 @@ static MTL_CONST constexpr int RMS_N_READS = 4;
 mlx/backend/metal/kernels/defines.h:15:32: warning: unused variable 'RMS_LOOPED_LIMIT' [-Wunused-const-variable]
 static MTL_CONST constexpr int RMS_LOOPED_LIMIT = 4096;
                                ^
-2026-11-16 11:43:41.736508+0000 xctest[13846:40643] [Metal Compiler Warning] Warning: Compilation succeeded with: 
+2026-11-23 13:11:45.036980+0000 xctest[15172:44131] [Metal Compiler Warning] Warning: Compilation succeeded with: 
 
 mlx/backend/metal/kernels/defines.h:10:32: warning: unused variable 'MAX_REDUCE_SPECIALIZED_DIMS' [-Wunused-const-variable]
 static MTL_CONST constexpr int MAX_REDUCE_SPECIALIZED_DIMS = 4;
@@ -365,7 +365,7 @@ static MTL_CONST constexpr int RMS_N_READS = 4;
 mlx/backend/metal/kernels/defines.h:15:32: warning: unused variable 'RMS_LOOPED_LIMIT' [-Wunused-const-variable]
 static MTL_CONST constexpr int RMS_LOOPED_LIMIT = 4096;
                                ^
-2026-11-16 11:43:41.826191+0000 xctest[13846:40577] [Metal Compiler Warning] Warning: Compilation succeeded with: 
+2026-11-23 13:11:45.137458+0000 xctest[15172:44122] [Metal Compiler Warning] Warning: Compilation succeeded with: 
 
 mlx/backend/metal/kernels/defines.h:10:32: warning: unused variable 'MAX_REDUCE_SPECIALIZED_DIMS' [-Wunused-const-variable]
 static MTL_CONST constexpr int MAX_REDUCE_SPECIALIZED_DIMS = 4;
@@ -385,7 +385,7 @@ static MTL_CONST constexpr int RMS_N_READS = 4;
 mlx/backend/metal/kernels/defines.h:15:32: warning: unused variable 'RMS_LOOPED_LIMIT' [-Wunused-const-variable]
 static MTL_CONST constexpr int RMS_LOOPED_LIMIT = 4096;
                                ^
-2026-11-16 11:43:41.899590+0000 xctest[13846:40577] [Metal Compiler Warning] Warning: Compilation succeeded with: 
+2026-11-23 13:11:45.220998+0000 xctest[15172:44122] [Metal Compiler Warning] Warning: Compilation succeeded with: 
 
 mlx/backend/metal/kernels/defines.h:10:32: warning: unused variable 'MAX_REDUCE_SPECIALIZED_DIMS' [-Wunused-const-variable]
 static MTL_CONST constexpr int MAX_REDUCE_SPECIALIZED_DIMS = 4;
@@ -405,29 +405,29 @@ static MTL_CONST constexpr int RMS_N_READS = 4;
 mlx/backend/metal/kernels/defines.h:15:32: warning: unused variable 'RMS_LOOPED_LIMIT' [-Wunused-const-variable]
 static MTL_CONST constexpr int RMS_LOOPED_LIMIT = 4096;
                                ^
-✔ Test basicGenerationAndAvailability() passed after 16.934 seconds.
+✔ Test basicGenerationAndAvailability() passed after 16.477 seconds.
 ◇ Test streamingProducesOutputAndCanBeCancelled() started.
-✔ Test streamingProducesOutputAndCanBeCancelled() passed after 0.323 seconds.
+✔ Test streamingProducesOutputAndCanBeCancelled() passed after 0.389 seconds.
 ◇ Test sameSessionRejectsConcurrentGeneration() started.
-✔ Test sameSessionRejectsConcurrentGeneration() passed after 0.151 seconds.
+✔ Test sameSessionRejectsConcurrentGeneration() passed after 0.286 seconds.
 ◇ Test freshSessionCanRespondAfterStreamingBreak() started.
-✔ Test freshSessionCanRespondAfterStreamingBreak() passed after 1.130 seconds.
+✔ Test freshSessionCanRespondAfterStreamingBreak() passed after 0.975 seconds.
 ◇ Test differentSessionsCanGenerateIndependently() started.
-✔ Test differentSessionsCanGenerateIndependently() passed after 1.605 seconds.
+✔ Test differentSessionsCanGenerateIndependently() passed after 1.851 seconds.
 ◇ Test multipleSequentialTurnsAndCacheClearStillWork() started.
-2026-11-16 11:43:48.975056+0000 xctest[13846:40666] [] nw_protocol_instance_set_output_handler Not calling remove_input_handler on 0x86d9ef480:udp
-✔ Test multipleSequentialTurnsAndCacheClearStillWork() passed after 5.192 seconds.
+2026-11-23 13:11:52.708135+0000 xctest[15172:44130] [] nw_protocol_instance_set_output_handler Not calling remove_input_handler on 0x959bd30c0:udp
+✔ Test multipleSequentialTurnsAndCacheClearStillWork() passed after 5.276 seconds.
 ◇ Test invalidModelIDFailsCleanlyAndCacheCanBeCleared() started.
-2026-11-16 11:43:51.620394+0000 xctest[13846:40577] [] nw_protocol_instance_set_output_handler Not calling remove_input_handler on 0x86db012c0:udp
-✔ Test invalidModelIDFailsCleanlyAndCacheCanBeCleared() passed after 0.257 seconds.
-✔ Suite "MLXLanguageModel GitHub Actions smoke tests" passed after 25.602 seconds.
-✔ Test run with 16 tests in 2 suites passed after 25.603 seconds.
-2026-11-16 11:43:52.272 xcodebuild[4175:14907] [MT] IDETestOperationsObserverDebug: 28.519 elapsed -- Testing started completed.
-2026-11-16 11:43:52.272 xcodebuild[4175:14907] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
-2026-11-16 11:43:52.272 xcodebuild[4175:14907] [MT] IDETestOperationsObserverDebug: 28.519 sec, +28.519 sec -- end
+2026-11-23 13:11:55.147126+0000 xctest[15172:44131] [] nw_protocol_instance_set_output_handler Not calling remove_input_handler on 0x9599de080:udp
+✔ Test invalidModelIDFailsCleanlyAndCacheCanBeCleared() passed after 0.168 seconds.
+✔ Suite "MLXLanguageModel GitHub Actions smoke tests" passed after 25.442 seconds.
+✔ Test run with 16 tests in 2 suites passed after 25.443 seconds.
+2026-11-23 13:11:55.742 xcodebuild[4286:14918] [MT] IDETestOperationsObserverDebug: 31.369 elapsed -- Testing started completed.
+2026-11-23 13:11:55.742 xcodebuild[4286:14918] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-23 13:11:55.742 xcodebuild[4286:14918] [MT] IDETestOperationsObserverDebug: 31.369 sec, +31.369 sec -- end
 
 Test session results, code coverage, and logs:
-	/Users/runner/Library/Developer/Xcode/DerivedData/MLXLanguageModelSmoke-gvcmyqogjmfpntehtburbjawijks/Logs/Test/Test-MLXLanguageModelSmoke-2026.11.16_11-38-26-+0000.xcresult
+	/Users/runner/Library/Developer/Xcode/DerivedData/MLXLanguageModelSmoke-gvcmyqogjmfpntehtburbjawijks/Logs/Test/Test-MLXLanguageModelSmoke-2026.11.23_13-05-10-+0000.xcresult
 
 ** TEST SUCCEEDED **
 
